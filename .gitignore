@@ -34,3 +34,7 @@ yarn-error.log*
 
 # Env files
 *.env
+
+# Misc.
+*.http
+postgresql_terminal.txt
