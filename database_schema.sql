@@ -1,8 +1,8 @@
 CREATE TABLE account (
 	id serial PRIMARY KEY,
-	username VARCHAR (50) UNIQUE NOT NULL,
+	username VARCHAR (20) UNIQUE NOT NULL,
 	salt VARCHAR (29) NOT NULL,
-	password VARCHAR (60) NOT NULL,
+	password VARCHAR (120) NOT NULL,
 	created_date TIMESTAMPTZ NOT NULL
 );
 
@@ -14,8 +14,15 @@ CREATE TABLE board (
 	last_updated TIMESTAMPTZ NOT NULL
 );
 
+CREATE TABLE board_user (
+	id serial PRIMARY KEY,
+	user_id integer references account(id) NOT NULL,
+	board_id integer references board(id) NOT NULL
+);
+
 CREATE TABLE task (
 	id serial PRIMARY KEY,
+	board_id integer references board(id) NOT NULL,
 	author_id integer references account(id) NOT NULL,
 	assignee_id integer references account(id),
 	state VARCHAR(4) NOT NULL, -- TODO, WIP, DONE

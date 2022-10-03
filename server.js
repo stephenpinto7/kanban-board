@@ -4,15 +4,30 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const { createClient } = require('redis');
+const pgp = require('pg-promise')();
 const RedisStore = require('connect-redis')(session);
 const helmet = require('helmet');
 const asyncHandler = require('express-async-handler');
+const {
+  body,
+  checkSchema,
+  param,
+  validationResult,
+} = require('express-validator');
+
+class ApiError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
 
 const app = express();
 const port = 3000;
 
 app.use(helmet());
 app.use(express.json());
+
 const redisClient = createClient({
   url: process.env.REDIS_URL,
   legacyMode: true,
@@ -49,31 +64,26 @@ function isAuthenticated(req, res, next) {
   }
 }
 
-const { Pool } = require('pg');
-const pool = new Pool({
+function validateParams(req, res, next) {
+  const errors = validationResult(req);
+
+  if (!errors.isEmpty()) {
+    const firstError = errors.array()[0];
+    res.status(400).json({
+      error: `Error with param '${firstError.param}': ${firstError.msg}`,
+    });
+  } else {
+    next();
+  }
+}
+
+const db = pgp({
   host: process.env.POSTGRESQL_HOST,
-  post: process.env.POSTGRESQL_PORT,
+  port: process.env.POSTGRESQL_PORT,
   database: process.env.POSTGRESQL_DB,
   user: process.env.POSTGRESQL_USER,
   password: process.env.POSTGRESQL_PASSWORD,
 });
-
-/**
- *
- * @param {string} username
- */
-async function getUser(username) {
-  const result = await pool.query(
-    'SELECT * FROM account WHERE username = $1;',
-    [username]
-  );
-
-  if (result.rows.length === 0) {
-    return null;
-  }
-
-  return result.rows[0];
-}
 
 app.get(
   '/api/username',
@@ -83,50 +93,48 @@ app.get(
   })
 );
 
+const validateUsername = body('username')
+  .exists({ checkNull: true, checkFalsy: true })
+  .withMessage('no username supplied')
+  .isString()
+  .withMessage('username must be a string')
+  .isLength({ max: 20 })
+  .withMessage('username should be 20 characters or less');
+
+const validatePassword = body('password')
+  .exists({ checkNull: true, checkFalsy: true })
+  .withMessage('no password supplied')
+  .isString()
+  .withMessage('password must be a string')
+  .isLength({ max: 120 })
+  .withMessage('password should be 120 characters or less');
+
 app.post(
   '/api/register',
+  validateUsername,
+  validatePassword,
+  validateParams,
   asyncHandler(async (req, res) => {
     const { username, password } = req.body;
 
-    if (!username) {
-      res.status(400).json({ error: 'No username supplied' });
-      return;
-    } else if (typeof username !== 'string') {
-      res.status(400).json({ error: 'Username must be a string' });
-      return;
-    } else if (username.length > 20) {
-      res.status(400).json({ error: 'Username must be 20 characters or less' });
-      return;
-    } else if (!password) {
-      res.status(400).json({ error: 'No password supplied' });
-      return;
-    } else if (typeof password !== 'string') {
-      res.status(400).json({ error: 'Password must be a string' });
-      return;
-    } else if (password.length > 120) {
-      res
-        .status(400)
-        .json({ error: 'Password must be 120 characters or less' });
-      return;
-    }
+    await db.tx(async (tx) => {
+      const user = await tx.oneOrNone(
+        'SELECT * FROM account WHERE username = $1;',
+        [username]
+      );
 
-    if (await getUser(username)) {
-      res.status(400).json({ error: 'Username already exists' });
-      return;
-    }
+      if (!user) {
+        throw new ApiError(400, 'Username already exists');
+      }
 
-    const salt = bcrypt.genSaltSync(12);
-    const passwordHash = bcrypt.hashSync(password, salt);
+      const salt = bcrypt.genSaltSync(12);
+      const passwordHash = bcrypt.hashSync(password, salt);
 
-    const insertResult = await pool.query(
-      'INSERT INTO account (username, password, salt, created_date) VALUES ($1, $2, $3, NOW())',
-      [username, passwordHash, salt]
-    );
-
-    if (insertResult.rowCount === 0) {
-      res.status(500).json({ error: 'Failed to create new user' });
-      return;
-    }
+      await tx.one(
+        'INSERT INTO account (username, password, salt, created_date) VALUES ($1, $2, $3, NOW()) RETURNING id',
+        [username, passwordHash, salt]
+      );
+    });
 
     res.status(204).json();
   })
@@ -134,33 +142,22 @@ app.post(
 
 app.post(
   '/api/login',
+  validateUsername,
+  validatePassword,
+  validateParams,
   asyncHandler(async (req, res) => {
     const { username: suppliedUsername, password: suppliedPassword } = req.body;
-    if (!suppliedUsername) {
-      res.status(400).json({ error: 'No username supplied' });
-      return;
-    } else if (typeof suppliedUsername !== 'string') {
-      res.status(400).json({ error: 'Username must be a string' });
-      return;
-    } else if (!suppliedPassword) {
-      res.status(400).json({ error: 'No password supplied' });
-      return;
-    } else if (typeof suppliedPassword !== 'string') {
-      res.status(400).json({ error: 'Password must be a string' });
-      return;
-    }
 
-    const user = await getUser(suppliedUsername);
+    const user = await db.oneOrNone(
+      'SELECT * FROM account WHERE username = $1;',
+      [suppliedUsername]
+    );
     if (!user) {
-      res.status(400);
-      res.json({ error: 'Username is not registered' });
-      return;
+      throw new ApiError(400, 'no account exists with the supplied username');
     }
 
     if (!bcrypt.compareSync(suppliedPassword, user.password)) {
-      res.status(400);
-      res.json({ error: 'Password was incorrect' });
-      return;
+      throw new ApiError(400, 'password was incorrect');
     }
 
     req.session.regenerate(() => {
@@ -180,96 +177,428 @@ app
   .get(
     isAuthenticated,
     asyncHandler(async (req, res) => {
-      const result = await pool.query(
-        'SELECT * FROM board WHERE owner_id = $1',
+      const boards = await db.any(
+        'SELECT b.* FROM board_user bu inner join board b on bu.board_id = b.id WHERE bu.user_id = $1',
         [req.session.userId]
       );
 
-      res.json({ result: result.rows });
+      res.json(boards);
     })
   )
   .post(
     isAuthenticated,
+    body('title')
+      .exists({ checkFalsy: true, checkNull: true })
+      .withMessage('no title supplied')
+      .isString()
+      .withMessage('title must be a string')
+      .isLength({ max: 20 }),
+    validateParams,
     asyncHandler(async (req, res) => {
       const { title } = req.body;
 
-      if (!title) {
-        res.status(400).json({ error: 'No title supplied' });
-        return;
-      } else if (typeof title !== 'string') {
-        res.status(400).json({ error: 'Title must be a string' });
-      }
-
-      const client = await pool.connect();
-      try {
-        const createResult = await client.query(
-          'INSERT INTO board (owner_id, title, created_date, last_updated) VALUES ($1, $2, NOW(), NOW()) returning id',
+      await db.tx(async (tx) => {
+        const { id } = await tx.one(
+          'INSERT INTO board (owner_id, title, created_date, last_updated) VALUES ($1, $2, NOW(), NOW()) RETURNING id',
           [req.session.userId, title]
         );
 
-        if (createResult.rowCount === 0) {
-          res.status(500).json({ error: 'Failed to create new board' });
-          return;
-        }
-
-        const newBoardResult = await client.query(
-          'SELECT * FROM board WHERE id = $1 AND owner_id = $2',
-          [createResult.rows[0].id, req.session.userId]
+        await tx.one(
+          'INSERT INTO board_user (user_id, board_id) VALUES ($1, $2)',
+          [req.session.userId, id]
         );
+      });
 
-        return res.status(201).json(newBoardResult.rows[0]);
-      } catch (error) {
-        throw error;
-      } finally {
-        client.release();
-      }
+      res.status(201).json();
     })
   );
+
+const validateBoardId = param('boardId')
+  .exists({ checkFalsy: true, checkNull: true })
+  .withMessage('No boardId supplied')
+  .isNumeric()
+  .withMessage('boardId should be numeric');
 
 app
   .route('/api/boards/:boardId')
   .get(
     isAuthenticated,
+    validateBoardId,
+    validateParams,
     asyncHandler(async (req, res) => {
       const { boardId } = req.params;
 
-      if (!boardId) {
-        res.status(400).json({ error: 'No board id supplied' });
-        return;
-      }
+      const board = await db.tx(async (tx) => {
+        const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
+          boardId,
+        ]);
 
-      const result = await pool.query(
-        'SELECT * FROM board WHERE id = $1 AND owner_id = $2',
-        [boardId, req.session.userId]
-      );
+        if (!board) {
+          throw new ApiError(404);
+        }
 
-      if (result.rows.length === 0) {
-        res.status(404).json({ error: 'Unable to find board' });
-        return;
-      }
+        const board_user = await task.oneOrNone(
+          'SELECT * FROM board_user WHERE board_id = $1 AND user_id = $2',
+          [boardId, req.session.userId]
+        );
 
-      res.json({ result: result.rows[0] });
+        if (!board_user) {
+          throw new ApiError(
+            403,
+            'you are not a user for this board. Please request permission from the board owner.'
+          );
+        }
+
+        return board;
+      });
+
+      res.json(board);
     })
   )
   .delete(
     isAuthenticated,
+    validateBoardId,
+    validateParams,
     asyncHandler(async (req, res) => {
       const { boardId } = req.params;
 
-      if (!boardId) {
-        res.status(400).json({ error: 'No board id supplied' });
-        return;
-      }
+      await db.tx(async (tx) => {
+        const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
+          boardId,
+        ]);
 
-      const result = await pool.query(
-        'DELETE FROM board WHERE owner_id = $1 AND id = $2',
-        [req.session.userId, boardId]
+        if (!board) {
+          throw new ApiError(404);
+        } else if (board.owner_id !== req.session.userId) {
+          throw new ApiError(
+            403,
+            'You are not the owner of this board. Please contact the board owner.'
+          );
+        }
+
+        // Need to remove any outstanding tasks or board users before deleting actual board
+        await tx.any('DELETE FROM task WHERE board_id = $1', [boardId]);
+        await tx.any('DELETE FROM board_user WHERE board_id = $1', [boardId]);
+
+        await tx.one('DELETE FROM board WHERE id = $1', [boardId]);
+      });
+
+      res.status(204).json();
+    })
+  );
+
+const validateTask = checkSchema({
+  assigneeId: {
+    in: 'body',
+    exists: {
+      errorMessage: 'no assignee supplied',
+      options: { checkNull: true, checkFalsy: true },
+    },
+    isString: { errorMessage: 'assignee should be a string' },
+    isNumeric: { errorMessage: 'assignee should be numeric' },
+  },
+  state: {
+    in: 'body',
+    exists: {
+      errorMessage: 'no state supplied',
+      options: { checkNull: true, checkFalsy: true },
+    },
+    isString: { errorMessage: 'state should be a string' },
+    isIn: {
+      errorMessage: "state must be one of 'TODO', 'WIP', or 'DONE'",
+      options: ['TODO', 'WIP', 'DONE'],
+    },
+  },
+  title: {
+    in: 'body',
+    exists: {
+      errorMessage: 'no title supplied',
+      isString: { errorMessage: 'title should be a string' },
+      options: { checkNull: true, checkFalsy: true },
+    },
+    isLength: {
+      errorMessage: 'title should be 20 characters or less',
+      options: { max: 20 },
+    },
+  },
+});
+
+const validateUserId = param('userId')
+  .exists({ checkFalsy: true, checkNull: true })
+  .withMessage('No userId supplied')
+  .isNumeric()
+  .withMessage('userId should be numeric');
+
+app
+  .route('/api/boards/:boardId/users')
+  .get(
+    isAuthenticated,
+    validateBoardId,
+    validateParams,
+    asyncHandler(async (req, res) => {
+      const { boardId } = req.params;
+
+      const users = await db.any(
+        'SELECT a.* FROM board_user bu inner join account a on a.id = bu.user_id WHERE bu.board_id = $1',
+        [boardId]
       );
 
-      if (result.rowCount === 0) {
-        res.status(500).json({ error: 'Unable to delete board' });
-        return;
-      }
+      res.json(users);
+    })
+  )
+  .post(
+    isAuthenticated,
+    validateBoardId,
+    validateUserId,
+    validateParams,
+    asyncHandler(async (req, res) => {
+      const { boardId } = req.params;
+      const { userId } = req.body;
+      await db.tx(async (tx) => {
+        const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
+          boardId,
+        ]);
+
+        if (!board) {
+          throw new ApiError(404);
+        } else if (board.owner_id !== req.session.userId) {
+          throw new ApiError(
+            403,
+            'you are not the owner of this board. Please contact the board owner.'
+          );
+        }
+
+        const user = await tx.oneOrNone(
+          'SELECT * FROM accounts WHERE id = $1',
+          [userId]
+        );
+        if (!user) {
+          throw new ApiError(400, 'no user with supplied id');
+        }
+
+        await tx.one(
+          'INSERT INTO board_user (user_id, board_id) VALUES ($1, $2)',
+          [userId, boardId]
+        );
+      });
+    })
+  );
+
+app
+  .route('/api/boards/:boardId/users/:userId')
+  .get(
+    isAuthenticated,
+    validateBoardId,
+    validateUserId,
+    validateParams,
+    asyncHandler(async (req, res) => {
+      const { boardId, userId } = req.params;
+
+      const user = await db.tx(async (tx) => {
+        const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
+          boardId,
+        ]);
+        if (!board) {
+          throw new ApiError(404, 'no board exists with the supplied id');
+        }
+
+        const user = await tx.oneOrNone(
+          'SELECT * FROM accounts WHERE id = $1',
+          [userId]
+        );
+        if (!user) {
+          throw new ApiError(404, 'no user exists with the supplied id');
+        }
+
+        const board_user = await tx.oneOrNone(
+          'SELECT * FROM board_user WHERE board_id = $1 AND user_id = $2',
+          [boardId, userId]
+        );
+        if (!board_user) {
+          throw new ApiError(400, 'user is not added to the supplied board');
+        }
+
+        return user;
+      });
+
+      res.json(user);
+    })
+  )
+  .delete(
+    isAuthenticated,
+    validateBoardId,
+    validateUserId,
+    validateParams,
+    asyncHandler(async (req, res) => {
+      const { boardId, userId } = req.params;
+
+      await db.tx(async (tx) => {
+        const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
+          boardId,
+        ]);
+        if (!board) {
+          throw new ApiError(404);
+        }
+
+        const user = await tx.oneOrNone(
+          'SELECT * FROM accounts WHERE id = $1',
+          [userId]
+        );
+        if (!user) {
+          throw new ApiError(404, 'no user exists with the supplied id');
+        }
+
+        await tx.oneOrNone(
+          'DELETE FROM board_user WHERE board_id = $1 AND user_id = $2',
+          [boardId, userId]
+        );
+      });
+
+      res.status(204).json();
+    })
+  );
+
+app
+  .route('/api/boards/:boardId/tasks')
+  .get(
+    isAuthenticated,
+    validateBoardId,
+    validateParams,
+    asyncHandler(async (req, res) => {
+      const { boardId } = req.params;
+
+      const tasks = await db.tx(async (tx) => {
+        const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
+          boardId,
+        ]);
+        if (!board) {
+          throw new ApiError(404);
+        }
+
+        return await tx.any('SELECT * FROM task WHERE board_id = $1', [
+          boardId,
+        ]);
+      });
+
+      return res.json(tasks);
+    })
+  )
+  .post(
+    isAuthenticated,
+    validateBoardId,
+    validateTask,
+    validateParams,
+    asyncHandler(async (req, res) => {
+      const { boardId } = req.params;
+
+      const { assigneeId, state, title } = req.body;
+
+      await db.tx(async (tx) => {
+        const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
+          boardId,
+        ]);
+        if (!board) {
+          throw new ApiError(404, 'no board exists with the supplied id');
+        }
+
+        const assignee = await tx.oneOrNone(
+          'SELECT * FROM account WHERE id = $1',
+          [assigneeId]
+        );
+        if (!assignee) {
+          throw new ApiError(
+            400,
+            'no user exists with the supplied assigneeId'
+          );
+        }
+
+        tx.one(
+          'INSERT INTO task (board_id, author_id, assignee_id, state, title, created_date, last_updated) VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) returning id',
+          [boardId, req.session.userId, assigneeId, state, title]
+        );
+      });
+
+      res.status(201).json();
+    })
+  );
+
+const validateTaskId = param('taskId')
+  .exists({ checkFalsy: true, checkNull: true })
+  .withMessage('no taskId supplied')
+  .isNumeric()
+  .withMessage('taskId should be numeric');
+
+app
+  .route('/api/boards/:boardId/tasks/:taskId')
+  .get(
+    isAuthenticated,
+    validateBoardId,
+    validateTaskId,
+    validateParams,
+    asyncHandler(async (req, res) => {
+      const { boardId, taskId } = req.params;
+
+      const task = await db.tx(async (tx) => {
+        const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
+          boardId,
+        ]);
+        if (!board) {
+          throw new ApiError(404, 'no board exists with the supplied id');
+        }
+
+        const board_user = await task.oneOrNone(
+          'SELECT * FROM board_user WHERE board_id = $1 AND user_id = $2',
+          [boardId, req.session.userId]
+        );
+        if (!board_user) {
+          throw new ApiError(
+            403,
+            'you are not a user for this board, please request permission from the board owner.'
+          );
+        }
+
+        const task = await task.oneOrNone('SELECT * FROM task WHERE id = $1', [
+          taskId,
+        ]);
+        if (!task) {
+          throw new ApiError(404, 'no task exists with the suplied id');
+        }
+
+        return task;
+      });
+
+      res.json(task);
+    })
+  )
+  .post(
+    isAuthenticated,
+    validateBoardId,
+    validateTaskId,
+    validateParams,
+    asyncHandler(async (req, res) => {
+      const { boardId, taskId } = req.params;
+
+      await db.tx(async (tx) => {
+        const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
+          boardId,
+        ]);
+        if (!board) {
+          throw new ApiError(404, 'no board exists with the supplied id');
+        }
+
+        const board_user = await task.oneOrNone(
+          'SELECT * FROM board_user WHERE board_id = $1 AND user_id = $2',
+          [boardId, req.session.userId]
+        );
+        if (!board_user) {
+          throw new ApiError(
+            403,
+            'you are not a user for this board, please request permission from the board owner.'
+          );
+        }
+
+        await task.oneOrNone('DELETE FROM task WHERE id = $1', [taskId]);
+      });
 
       res.status(204).json();
     })
@@ -282,8 +611,17 @@ app.use((req, res, next) => {
 
 // custom error handler
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: 'An unexpected error occured!' });
+  if (err instanceof ApiError) {
+    res.status(err.status);
+    if (err.message) {
+      res.json({ error: err.message });
+    } else {
+      res.json();
+    }
+  } else {
+    console.error(err.stack);
+    res.status(500).json({ error: 'An unexpected error occured!' });
+  }
 });
 
 app.listen(port, () => {
