@@ -3,7 +3,6 @@
 </template>
 
 <script lang="ts" setup>
-import type { ServerResponse } from './queries';
 import { useRouter } from 'vue-router';
 import { useQuasar } from 'quasar';
 

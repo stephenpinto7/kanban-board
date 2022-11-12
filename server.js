@@ -56,6 +56,12 @@ app.use((req, res, next) => {
   }
 });
 
+app.use((req, res, next) => {
+  res.set('Cache-control', 'no-store');
+
+  next();
+});
+
 function isAuthenticated(req, res, next) {
   if (req.session && req.session.username && req.session.username.length > 0) {
     next();
@@ -136,7 +142,7 @@ app.post(
       );
     });
 
-    res.status(204).json();
+    res.status(204).json(null);
   })
 );
 
@@ -163,14 +169,38 @@ app.post(
     req.session.regenerate(() => {
       req.session.username = user.username;
       req.session.userId = user.id;
-      res.status(204).json();
+      res.status(204).json(null);
     });
   })
 );
 
 app.post('/api/logout', (req, res) => {
-  req.session.destroy(() => res.status(204).json());
+  req.session.destroy(() => res.status(204).json(null));
 });
+
+app.get(
+  '/api/user/:username',
+  isAuthenticated,
+  param('username')
+    .exists({ checkNull: true, checkFalsy: true })
+    .withMessage('no username supplied')
+    .isString()
+    .withMessage('username must be a string'),
+  validateParams,
+  asyncHandler(async (req, res) => {
+    const { username } = req.params;
+
+    const user = await db.oneOrNone(
+      'SELECT id FROM account WHERE username = $1',
+      [username]
+    );
+    if (!user) {
+      throw new ApiError(404);
+    }
+
+    return res.json(user.id);
+  })
+);
 
 app
   .route('/api/boards')
@@ -204,12 +234,12 @@ app
         );
 
         await tx.one(
-          'INSERT INTO board_user (user_id, board_id) VALUES ($1, $2)',
+          'INSERT INTO board_user (user_id, board_id) VALUES ($1, $2) RETURNING id',
           [req.session.userId, id]
         );
       });
 
-      res.status(201).json();
+      res.status(201).json(null);
     })
   );
 
@@ -237,7 +267,7 @@ app
           throw new ApiError(404);
         }
 
-        const board_user = await task.oneOrNone(
+        const board_user = await tx.oneOrNone(
           'SELECT * FROM board_user WHERE board_id = $1 AND user_id = $2',
           [boardId, req.session.userId]
         );
@@ -283,45 +313,17 @@ app
         await tx.one('DELETE FROM board WHERE id = $1', [boardId]);
       });
 
-      res.status(204).json();
+      res.status(204).json(null);
     })
   );
 
-const validateTask = checkSchema({
-  assigneeId: {
-    in: 'body',
-    exists: {
-      errorMessage: 'no assignee supplied',
-      options: { checkNull: true, checkFalsy: true },
-    },
-    isString: { errorMessage: 'assignee should be a string' },
-    isNumeric: { errorMessage: 'assignee should be numeric' },
-  },
-  state: {
-    in: 'body',
-    exists: {
-      errorMessage: 'no state supplied',
-      options: { checkNull: true, checkFalsy: true },
-    },
-    isString: { errorMessage: 'state should be a string' },
-    isIn: {
-      errorMessage: "state must be one of 'TODO', 'WIP', or 'DONE'",
-      options: ['TODO', 'WIP', 'DONE'],
-    },
-  },
-  title: {
-    in: 'body',
-    exists: {
-      errorMessage: 'no title supplied',
-      isString: { errorMessage: 'title should be a string' },
-      options: { checkNull: true, checkFalsy: true },
-    },
-    isLength: {
-      errorMessage: 'title should be 20 characters or less',
-      options: { max: 20 },
-    },
-  },
-});
+const validateTaskTitle = body('title')
+  .exists({ checkNull: true, checkFalsy: true })
+  .withMessage('no title supplied')
+  .isString()
+  .withMessage('title should be a string')
+  .isLength({ max: 20 })
+  .withMessage('title should be 20 characters or less');
 
 const validateUserId = param('userId')
   .exists({ checkFalsy: true, checkNull: true })
@@ -339,7 +341,7 @@ app
       const { boardId } = req.params;
 
       const users = await db.any(
-        'SELECT a.* FROM board_user bu inner join account a on a.id = bu.user_id WHERE bu.board_id = $1',
+        'SELECT a.id, a.username FROM board_user bu inner join account a on a.id = bu.user_id WHERE bu.board_id = $1 ORDER BY a.username',
         [boardId]
       );
 
@@ -349,12 +351,16 @@ app
   .post(
     isAuthenticated,
     validateBoardId,
-    validateUserId,
+    body('userId')
+      .exists({ checkFalsy: true, checkNull: true })
+      .withMessage('No userId supplied')
+      .isNumeric()
+      .withMessage('userId should be numeric'),
     validateParams,
     asyncHandler(async (req, res) => {
       const { boardId } = req.params;
       const { userId } = req.body;
-      await db.tx(async (tx) => {
+      const user = await db.tx(async (tx) => {
         const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
           boardId,
         ]);
@@ -369,7 +375,7 @@ app
         }
 
         const user = await tx.oneOrNone(
-          'SELECT * FROM accounts WHERE id = $1',
+          'SELECT id, username FROM account WHERE id = $1',
           [userId]
         );
         if (!user) {
@@ -377,10 +383,14 @@ app
         }
 
         await tx.one(
-          'INSERT INTO board_user (user_id, board_id) VALUES ($1, $2)',
+          'INSERT INTO board_user (user_id, board_id) VALUES ($1, $2) RETURNING id',
           [userId, boardId]
         );
+
+        return user;
       });
+
+      return res.status(201).json(user);
     })
   );
 
@@ -454,7 +464,7 @@ app
         );
       });
 
-      res.status(204).json();
+      res.status(204).json(null);
     })
   );
 
@@ -486,14 +496,14 @@ app
   .post(
     isAuthenticated,
     validateBoardId,
-    validateTask,
+    validateTaskTitle,
     validateParams,
     asyncHandler(async (req, res) => {
       const { boardId } = req.params;
 
-      const { assigneeId, state, title } = req.body;
+      const { title } = req.body;
 
-      await db.tx(async (tx) => {
+      const task = await db.tx(async (tx) => {
         const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
           boardId,
         ]);
@@ -501,24 +511,13 @@ app
           throw new ApiError(404, 'no board exists with the supplied id');
         }
 
-        const assignee = await tx.oneOrNone(
-          'SELECT * FROM account WHERE id = $1',
-          [assigneeId]
-        );
-        if (!assignee) {
-          throw new ApiError(
-            400,
-            'no user exists with the supplied assigneeId'
-          );
-        }
-
-        tx.one(
-          'INSERT INTO task (board_id, author_id, assignee_id, state, title, created_date, last_updated) VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) returning id',
-          [boardId, req.session.userId, assigneeId, state, title]
+        return tx.one(
+          "INSERT INTO task (board_id, author_id, state, title, description, created_date, last_updated) VALUES ($1, $2, 'TODO', $3, '', NOW(), NOW()) returning *",
+          [boardId, req.session.userId, title]
         );
       });
 
-      res.status(201).json();
+      res.status(201).json(task);
     })
   );
 
@@ -600,7 +599,7 @@ app
         await task.oneOrNone('DELETE FROM task WHERE id = $1', [taskId]);
       });
 
-      res.status(204).json();
+      res.status(204).json(null);
     })
   );
 
@@ -616,7 +615,7 @@ app.use((err, req, res, next) => {
     if (err.message) {
       res.json({ error: err.message });
     } else {
-      res.json();
+      res.json(null);
     }
   } else {
     console.error(err.stack);

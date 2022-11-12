@@ -17,6 +17,22 @@ const routes: RouteRecordRaw[] = [
     children: [{ path: '', component: () => import('pages/HomePage.vue') }],
   },
   {
+    path: '/board',
+    component: () => import('layouts/MainLayout.vue'),
+    children: [
+      {
+        path: ':boardId',
+        component: () => import('pages/BoardPage.vue'),
+        props: true,
+      },
+    ],
+  },
+  {
+    path: '/boards',
+    component: () => import('layouts/MainLayout.vue'),
+    children: [{ path: '', component: () => import('pages/BoardsPage.vue') }],
+  },
+  {
     path: '/:catchAll(.*)*',
     component: () => import('pages/ErrorNotFound.vue'),
   },
