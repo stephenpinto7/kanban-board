@@ -56,12 +56,6 @@ app.use((req, res, next) => {
   }
 });
 
-app.use((req, res, next) => {
-  res.set('Cache-control', 'no-store');
-
-  next();
-});
-
 function isAuthenticated(req, res, next) {
   if (req.session && req.session.username && req.session.username.length > 0) {
     next();
@@ -129,7 +123,7 @@ app.post(
         [username]
       );
 
-      if (!user) {
+      if (user) {
         throw new ApiError(400, 'Username already exists');
       }
 
@@ -387,6 +381,11 @@ app
           [userId, boardId]
         );
 
+        await tx.one(
+          'UPDATE board set last_updated = NOW() where id = $1 returning id',
+          [board.id]
+        );
+
         return user;
       });
 
@@ -462,6 +461,11 @@ app
           'DELETE FROM board_user WHERE board_id = $1 AND user_id = $2',
           [boardId, userId]
         );
+
+        await tx.one(
+          'UPDATE board set last_updated = NOW() where id = $1 returning id',
+          [board.id]
+        );
       });
 
       res.status(204).json(null);
@@ -470,9 +474,8 @@ app
 
 app
   .route('/api/boards/:boardId/tasks')
+  .all(isAuthenticated, validateBoardId)
   .get(
-    isAuthenticated,
-    validateBoardId,
     validateParams,
     asyncHandler(async (req, res) => {
       const { boardId } = req.params;
@@ -494,8 +497,6 @@ app
     })
   )
   .post(
-    isAuthenticated,
-    validateBoardId,
     validateTaskTitle,
     validateParams,
     asyncHandler(async (req, res) => {
@@ -511,10 +512,17 @@ app
           throw new ApiError(404, 'no board exists with the supplied id');
         }
 
-        return tx.one(
+        const task = tx.one(
           "INSERT INTO task (board_id, author_id, state, title, description, created_date, last_updated) VALUES ($1, $2, 'TODO', $3, '', NOW(), NOW()) returning *",
           [boardId, req.session.userId, title]
         );
+
+        await tx.one(
+          'UPDATE board set last_updated = NOW() where id = $1 returning id',
+          [board.id]
+        );
+
+        return task;
       });
 
       res.status(201).json(task);
@@ -529,10 +537,8 @@ const validateTaskId = param('taskId')
 
 app
   .route('/api/boards/:boardId/tasks/:taskId')
+  .all(isAuthenticated, validateBoardId, validateTaskId)
   .get(
-    isAuthenticated,
-    validateBoardId,
-    validateTaskId,
     validateParams,
     asyncHandler(async (req, res) => {
       const { boardId, taskId } = req.params;
@@ -569,10 +575,7 @@ app
       res.json(task);
     })
   )
-  .post(
-    isAuthenticated,
-    validateBoardId,
-    validateTaskId,
+  .delete(
     validateParams,
     asyncHandler(async (req, res) => {
       const { boardId, taskId } = req.params;
@@ -585,7 +588,7 @@ app
           throw new ApiError(404, 'no board exists with the supplied id');
         }
 
-        const board_user = await task.oneOrNone(
+        const board_user = await tx.oneOrNone(
           'SELECT * FROM board_user WHERE board_id = $1 AND user_id = $2',
           [boardId, req.session.userId]
         );
@@ -596,10 +599,99 @@ app
           );
         }
 
-        await task.oneOrNone('DELETE FROM task WHERE id = $1', [taskId]);
+        await tx.oneOrNone('DELETE FROM task WHERE id = $1 returning id', [
+          taskId,
+        ]);
+
+        await tx.one(
+          'UPDATE board set last_updated = NOW() where id = $1 returning id',
+          [board.id]
+        );
       });
 
       res.status(204).json(null);
+    })
+  )
+  .put(
+    checkSchema({
+      state: {
+        in: ['body'],
+        exists: {
+          options: { checkNull: true, checkFalsy: true },
+          errorMessage: 'no task state supplied',
+        },
+        in: {
+          options: ['TODO', 'WIP', 'DONE'],
+          errorMessage: "task state should be one of: 'TODO', 'WIP', 'DONE'",
+        },
+      },
+      title: {
+        exists: {
+          options: { checkNull: true, checkFalsy: true },
+          errorMessage: 'no title supplied',
+        },
+        isString: {
+          options: true,
+          errorMessage: 'title should be a string',
+        },
+        isLength: {
+          options: { max: 30 },
+          errorMessage: 'title should be 30 characters or less',
+        },
+      },
+      description: {
+        exists: {
+          options: { checkNull: true, checkFalsy: true },
+          errorMessage: 'no description supplied',
+        },
+        isString: {
+          options: true,
+          errorMessage: 'description should be a string',
+        },
+        isLength: {
+          options: { max: 500 },
+          errorMessage: 'description should be 500 characters or less',
+        },
+      },
+    }),
+    validateParams,
+    asyncHandler(async (req, res) => {
+      const { boardId, taskId } = req.params;
+      const { state, title, description } = req.body;
+
+      const task = await db.tx(async (tx) => {
+        const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
+          boardId,
+        ]);
+        if (!board) {
+          throw new ApiError(404, 'no board exists with the supplied id');
+        }
+
+        const board_user = await tx.oneOrNone(
+          'SELECT * FROM board_user WHERE board_id = $1 AND user_id = $2',
+          [boardId, req.session.userId]
+        );
+        if (!board_user) {
+          throw new ApiError(
+            403,
+            'you are not a user for this board, please request permission from the board owner.'
+          );
+        }
+
+        const task = await tx.one(
+          'UPDATE task SET state = $1, title = $2, description = $3, last_updated = NOW() WHERE id = $4 returning *',
+          [state, title, description, taskId]
+        );
+
+        await tx.one(
+          'UPDATE board set last_updated = NOW() where id = $1 returning id',
+          [board.id]
+        );
+
+        return task;
+      });
+
+      res.json(task);
     })
   );
 

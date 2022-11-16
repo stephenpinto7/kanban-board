@@ -26,7 +26,7 @@
         class="q-mb-md"
         @click="addTaskDialog"
       />
-      <div class="row items-stretch q-col-gutter-xl">
+      <div class="row items-stretch q-col-gutter-lg">
         <div class="col-12 col-sm-4">
           <task-column :tasks="todoTasks" title="To-Do" />
         </div>
@@ -48,10 +48,10 @@ import {
   useAddBoardUser,
   useBoardUsers,
   useCreateTask,
+  Task,
 } from 'src/queries';
 import { computed } from 'vue';
 import { useQuasar } from 'quasar';
-import TaskCard from 'src/components/TaskCard.vue';
 import TaskColumn from 'src/components/TaskColumn.vue';
 
 const props = defineProps<{ boardId: string }>();

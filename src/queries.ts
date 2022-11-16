@@ -4,28 +4,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import ky from 'ky';
 
 export async function get<T>(target: string): Promise<T> {
-  // const response = await fetch(target, {
-  //   method: 'GET',
-  //   headers: {
-  //     Accept: 'application/json',
-  //     'Content-Type': 'application/json',
-  //   },
-  //   credentials: 'include',
-  // });
-
-  // if (!response.ok) {
-  //   if (response.status === 401) {
-  //     window.location.href = '/'; // Hard redirect
-  //   }
-
-  //   const errorResponse = await response.json();
-  //   throw new Error(errorResponse.error);
-  // }
-
-  // return (await response.json()) as T;
-
   return await ky
     .get(target, {
+      retry: 0,
       hooks: {
         afterResponse: [
           (_request, _options, response) => {
@@ -40,33 +21,43 @@ export async function get<T>(target: string): Promise<T> {
 }
 
 export async function post<T>(target: string, data?: unknown): Promise<T> {
-  // const response = await fetch(target, {
-  //   method: 'POST',
-  //   headers: {
-  //     Accept: 'application/json',
-  //     'Content-Type': 'application/json',
-  //   },
-  //   credentials: 'include',
-  //   body: data ? JSON.stringify(data) : undefined,
-  // });
-
-  // if (!response.ok) {
-  //   if (response.status === 401) {
-  //     window.location.href = '/'; // Hard redirect
-  //   }
-
-  //   const errorResponse = await response.json();
-
-  //   throw new Error(errorResponse.error);
-  // } else if (response.status === 204) {
-  //   return;
-  // } else {
-  //   return response.json() as T;
-  // }
-
   return await ky
     .post(target, {
       json: data,
+      retry: 0,
+      hooks: {
+        afterResponse: [
+          (_request, _options, response) => {
+            if (response.status === 401) {
+              window.location.href = '/'; // hard redirect
+            }
+          },
+        ],
+      },
+    })
+    .json();
+}
+
+export async function del(target: string): Promise<void> {
+  await ky.delete(target, {
+    retry: 0,
+    hooks: {
+      afterResponse: [
+        (_request, _options, response) => {
+          if (response.status === 401) {
+            window.location.href = '/'; // hard redirect
+          }
+        },
+      ],
+    },
+  });
+}
+
+export async function put<T>(target: string, data?: unknown): Promise<T> {
+  return await ky
+    .put(target, {
+      json: data,
+      retry: 0,
       hooks: {
         afterResponse: [
           (_request, _options, response) => {
@@ -209,6 +200,67 @@ export function useCreateTask() {
   );
 }
 
+interface DeleteTaskPayload {
+  board: number;
+  task: number;
+}
+export function useDeleteTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    ({ board, task }: DeleteTaskPayload) =>
+      del(`/api/boards/${board}/tasks/${task}`),
+    {
+      onSuccess: (_, { board, task }) => {
+        queryClient.setQueriesData<Task[]>(['tasks', board], (tasks) => {
+          if (!tasks) {
+            return undefined;
+          }
+          return tasks.filter((t) => t.id !== task);
+        });
+      },
+    }
+  );
+}
+
+interface UpdateTaskPayload {
+  board: number;
+  task: number;
+  title: string;
+  description: string;
+  state: TaskState;
+}
+export function useUpdateTask() {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    ({ board, task, title, description, state }: UpdateTaskPayload) =>
+      put<Task>(`/api/boards/${board}/tasks/${task}`, {
+        title,
+        description,
+        state,
+      }),
+    {
+      onSuccess: (updatedTask, { board, task }) => {
+        queryClient.setQueriesData<Task[]>(['tasks', board], (tasks) => {
+          if (!tasks) {
+            return undefined;
+          }
+          const newTasks = tasks.slice();
+          const oldTaskIndex = newTasks.findIndex((t) => t.id === task);
+          if (oldTaskIndex === -1) {
+            throw new Error('Unable to find task after update!');
+          }
+          newTasks[oldTaskIndex] = updatedTask;
+
+          return newTasks;
+        });
+        return queryClient.invalidateQueries(['boards', board]);
+      },
+    }
+  );
+}
+
 export interface User {
   id: number;
   username: string;
@@ -249,13 +301,3 @@ export function useAddBoardUser() {
     }
   );
 }
-
-// export function useCreateTask() {
-//   const queryClient = useQueryClient();
-
-//   return useMutation((title: string) => post('/api/boards', { title }), {
-//     onSuccess: () => {
-//       return queryClient.invalidateQueries(['boards']);
-//     },
-//   });
-// }
