@@ -49,10 +49,12 @@ import {
   useBoardUsers,
   useCreateTask,
   Task,
+  useUpdateTask,
 } from 'src/queries';
 import { computed } from 'vue';
 import { useQuasar } from 'quasar';
 import TaskColumn from 'src/components/TaskColumn.vue';
+import EditTaskDialog from 'src/components/EditTaskDialog.vue';
 
 const props = defineProps<{ boardId: string }>();
 const boardId = computed(() => Number.parseInt(props.boardId, 10));
@@ -63,6 +65,7 @@ const { data: tasks } = useTasks(boardId);
 const { data: users } = useBoardUsers(boardId);
 const { mutate: addUser } = useAddBoardUser();
 const { mutate: createTask } = useCreateTask();
+const { mutate: updateTask } = useUpdateTask();
 
 const addUserDialog = () => {
   $q.dialog({
@@ -97,15 +100,20 @@ const addUserDialog = () => {
 
 const addTaskDialog = () => {
   $q.dialog({
-    title: 'New Task Title',
-    prompt: {
-      model: '',
-      type: 'string',
+    component: EditTaskDialog,
+    componentProps: {
+      title: '',
+      description: '',
+      state: 'TODO',
     },
-    cancel: true,
-  }).onOk((title) => {
+  }).onOk((taskEdit) => {
     createTask(
-      { board: boardId.value, title },
+      {
+        board: boardId.value,
+        title: taskEdit.title,
+        description: taskEdit.description,
+        state: taskEdit.state,
+      },
       {
         onError: (error) => {
           console.error('Error creating task: %o', error);

@@ -311,13 +311,47 @@ app
     })
   );
 
-const validateTaskTitle = body('title')
-  .exists({ checkNull: true, checkFalsy: true })
-  .withMessage('no title supplied')
-  .isString()
-  .withMessage('title should be a string')
-  .isLength({ max: 20 })
-  .withMessage('title should be 20 characters or less');
+const validateTask = checkSchema({
+  state: {
+    in: ['body'],
+    exists: {
+      options: { checkNull: true, checkFalsy: true },
+      errorMessage: 'no task state supplied',
+    },
+    in: {
+      options: ['TODO', 'WIP', 'DONE'],
+      errorMessage: "task state should be one of: 'TODO', 'WIP', 'DONE'",
+    },
+  },
+  title: {
+    exists: {
+      options: { checkNull: true, checkFalsy: true },
+      errorMessage: 'no title supplied',
+    },
+    isString: {
+      options: true,
+      errorMessage: 'title should be a string',
+    },
+    isLength: {
+      options: { max: 30 },
+      errorMessage: 'title should be 30 characters or less',
+    },
+  },
+  description: {
+    exists: {
+      options: { checkNull: true, checkFalsy: true },
+      errorMessage: 'no description supplied',
+    },
+    isString: {
+      options: true,
+      errorMessage: 'description should be a string',
+    },
+    isLength: {
+      options: { max: 500 },
+      errorMessage: 'description should be 500 characters or less',
+    },
+  },
+});
 
 const validateUserId = param('userId')
   .exists({ checkFalsy: true, checkNull: true })
@@ -497,12 +531,11 @@ app
     })
   )
   .post(
-    validateTaskTitle,
+    validateTask,
     validateParams,
     asyncHandler(async (req, res) => {
       const { boardId } = req.params;
-
-      const { title } = req.body;
+      const { title, state, description } = req.body;
 
       const task = await db.tx(async (tx) => {
         const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
@@ -513,8 +546,8 @@ app
         }
 
         const task = tx.one(
-          "INSERT INTO task (board_id, author_id, state, title, description, created_date, last_updated) VALUES ($1, $2, 'TODO', $3, '', NOW(), NOW()) returning *",
-          [boardId, req.session.userId, title]
+          'INSERT INTO task (board_id, author_id, state, title, description, created_date, last_updated) VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) returning *',
+          [boardId, req.session.userId, state, title, description]
         );
 
         await tx.one(
@@ -613,47 +646,6 @@ app
     })
   )
   .put(
-    checkSchema({
-      state: {
-        in: ['body'],
-        exists: {
-          options: { checkNull: true, checkFalsy: true },
-          errorMessage: 'no task state supplied',
-        },
-        in: {
-          options: ['TODO', 'WIP', 'DONE'],
-          errorMessage: "task state should be one of: 'TODO', 'WIP', 'DONE'",
-        },
-      },
-      title: {
-        exists: {
-          options: { checkNull: true, checkFalsy: true },
-          errorMessage: 'no title supplied',
-        },
-        isString: {
-          options: true,
-          errorMessage: 'title should be a string',
-        },
-        isLength: {
-          options: { max: 30 },
-          errorMessage: 'title should be 30 characters or less',
-        },
-      },
-      description: {
-        exists: {
-          options: { checkNull: true, checkFalsy: true },
-          errorMessage: 'no description supplied',
-        },
-        isString: {
-          options: true,
-          errorMessage: 'description should be a string',
-        },
-        isLength: {
-          options: { max: 500 },
-          errorMessage: 'description should be 500 characters or less',
-        },
-      },
-    }),
     validateParams,
     asyncHandler(async (req, res) => {
       const { boardId, taskId } = req.params;

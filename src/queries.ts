@@ -180,13 +180,15 @@ export function useTasks(board: MaybeRef<number>) {
 interface CreateTaskPayload {
   board: number;
   title: string;
+  description: string;
+  state: TaskState;
 }
 export function useCreateTask() {
   const queryClient = useQueryClient();
 
   return useMutation(
-    ({ board, title }: CreateTaskPayload) =>
-      post<Task>(`/api/boards/${board}/tasks`, { title }),
+    ({ board, title, description, state }: CreateTaskPayload) =>
+      post<Task>(`/api/boards/${board}/tasks`, { title, description, state }),
     {
       onSuccess: (newTask, { board }) => {
         queryClient.setQueriesData<Task[]>(['tasks', board], (tasks) => {
@@ -269,6 +271,20 @@ export interface User {
 export function useBoardUsers(board: MaybeRef<number>) {
   return useQuery(['users', board], () =>
     get<User[]>(`/api/boards/${unref(board)}/users`)
+  );
+}
+
+export function useUser(board: MaybeRef<number>, user: MaybeRef<number>) {
+  const queryClient = useQueryClient();
+  return useQuery(
+    ['users', board, user],
+    () => get<User>(`/api/boards/${unref(board)}/users/${user}`),
+    {
+      initialData: () =>
+        queryClient
+          .getQueryData<User[]>(['users', board])
+          ?.find((u) => u.id === unref(user)),
+    }
   );
 }
 

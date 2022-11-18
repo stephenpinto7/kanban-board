@@ -22,9 +22,15 @@
         </q-btn>
       </div>
     </q-card-section>
-    <q-card-section class="text-body1">
-      {{ task.description.substring(0, 50) }}
-      {{ task.description.length > 50 ? '...' : '' }}
+    <q-card-section>
+      <q-input
+        :model-value="task.description"
+        label="Description"
+        type="textarea"
+        readonly
+        outlined
+        input-style="resize: none"
+      />
     </q-card-section>
     <q-card-section>
       <div>Created: {{ created }}</div>
