@@ -23,6 +23,11 @@
       </div>
     </q-card-section>
     <q-card-section>
+      <q-chip icon="person" outline color="accent">
+        {{ user ? user.username : 'unassigned' }}
+      </q-chip>
+    </q-card-section>
+    <q-card-section>
       <q-input
         :model-value="task.description"
         label="Description"
@@ -33,8 +38,11 @@
       />
     </q-card-section>
     <q-card-section>
-      <div>Created: {{ created }}</div>
-      <div>Last Activity: {{ lastActivity }}</div>
+      <div><span class="text-weight-medium">Created:</span> {{ created }}</div>
+      <div>
+        <span class="text-weight-medium">Last Activity:</span>
+        {{ lastActivity }}
+      </div>
     </q-card-section>
     <q-card-actions align="between">
       <q-btn
@@ -66,10 +74,11 @@
 </template>
 
 <script setup lang="ts">
-import { Task, useDeleteTask, useUpdateTask } from 'src/queries';
+import { Task, useBoardUsers, useDeleteTask, useUpdateTask } from 'src/queries';
 import { useTimeAgo } from '@vueuse/core';
 import { useQuasar } from 'quasar';
 import EditTaskDialog from 'src/components/EditTaskDialog.vue';
+import { computed, toRef } from 'vue';
 
 const props = defineProps<{
   task: Task;
@@ -82,6 +91,11 @@ const lastActivity = useTimeAgo(props.task.last_updated);
 
 const { mutate: deleteTask } = useDeleteTask();
 const { mutate: updateTask } = useUpdateTask();
+
+const { data: users } = useBoardUsers(toRef(props.task, 'board_id'));
+const user = computed(() =>
+  users.value?.find((u) => u.id === props.task.assignee_id)
+);
 
 const performDeleteTask = () => {
   $q.dialog({
@@ -113,8 +127,11 @@ const editTask = () => {
       title: props.task.title,
       description: props.task.description,
       state: props.task.state,
+      assignee: props.task.assignee_id,
+      board: props.task.board_id,
     },
   }).onOk((taskEdit) => {
+    console.log('Task edit: %o', taskEdit);
     updateTask(
       {
         board: props.task.board_id,
@@ -122,6 +139,7 @@ const editTask = () => {
         title: taskEdit.title,
         description: taskEdit.description,
         state: taskEdit.state,
+        assignee: taskEdit.assignee,
       },
       {
         onError(error, _variables, _context) {
@@ -140,6 +158,7 @@ const progress = () => {
       title: props.task.title,
       description: props.task.description,
       state: props.task.state === 'TODO' ? 'WIP' : 'DONE',
+      assignee: props.task.assignee_id,
     },
     {
       onError(error, _variables, _context) {
@@ -157,6 +176,7 @@ const revert = () => {
       title: props.task.title,
       description: props.task.description,
       state: props.task.state === 'DONE' ? 'WIP' : 'TODO',
+      assignee: props.task.assignee_id,
     },
     {
       onError(error, _variables, _context) {

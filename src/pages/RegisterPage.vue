@@ -75,7 +75,7 @@ const router = useRouter();
 const username = ref('');
 const usernameRules: ValidationRule<string>[] = [
   (val) => val.length > 0 || 'username cannot be blank',
-  (val) => val.length <= 20 || 'username must be 20 characters or less',
+  (val) => val.length <= 30 || 'username must be 30 characters or less',
 ];
 
 const password = ref('');

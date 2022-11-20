@@ -333,13 +333,13 @@ const validateTask = checkSchema({
       errorMessage: 'title should be a string',
     },
     isLength: {
-      options: { max: 30 },
-      errorMessage: 'title should be 30 characters or less',
+      options: { max: 20 },
+      errorMessage: 'title should be 20 characters or less',
     },
   },
   description: {
     exists: {
-      options: { checkNull: true, checkFalsy: true },
+      options: { checkNull: true, checkFalsy: false },
       errorMessage: 'no description supplied',
     },
     isString: {
@@ -349,6 +349,15 @@ const validateTask = checkSchema({
     isLength: {
       options: { max: 500 },
       errorMessage: 'description should be 500 characters or less',
+    },
+  },
+  assignee: {
+    exists: {
+      options: { checkNull: false, checkFalsy: false },
+    },
+    isInt: {
+      options: true,
+      errorMessage: 'assignee should be an integer',
     },
   },
 });
@@ -535,7 +544,7 @@ app
     validateParams,
     asyncHandler(async (req, res) => {
       const { boardId } = req.params;
-      const { title, state, description } = req.body;
+      const { title, state, description, assignee } = req.body;
 
       const task = await db.tx(async (tx) => {
         const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
@@ -543,6 +552,16 @@ app
         ]);
         if (!board) {
           throw new ApiError(404, 'no board exists with the supplied id');
+        }
+
+        const user = tx.oneOrNone('SELECT * FROM user where id = $1', [
+          assignee,
+        ]);
+        if (!user) {
+          throw new ApiError(
+            404,
+            'no user exists with the supplied assignee id'
+          );
         }
 
         const task = tx.one(
@@ -647,9 +666,10 @@ app
   )
   .put(
     validateParams,
+    validateTask,
     asyncHandler(async (req, res) => {
       const { boardId, taskId } = req.params;
-      const { state, title, description } = req.body;
+      const { state, title, description, assignee } = req.body;
 
       const task = await db.tx(async (tx) => {
         const board = await tx.oneOrNone('SELECT * FROM board WHERE id = $1', [
@@ -671,8 +691,8 @@ app
         }
 
         const task = await tx.one(
-          'UPDATE task SET state = $1, title = $2, description = $3, last_updated = NOW() WHERE id = $4 returning *',
-          [state, title, description, taskId]
+          'UPDATE task SET state = $1, title = $2, description = $3, assignee_id = $4, last_updated = NOW() WHERE id = $5 returning *',
+          [state, title, description, assignee, taskId]
         );
 
         await tx.one(

@@ -25,8 +25,9 @@ CREATE TABLE task (
 	id serial PRIMARY KEY,
 	board_id integer references board(id) NOT NULL,
 	author_id integer references account(id) NOT NULL,
+	assignee_id integer references account(id),
 	state VARCHAR(4) NOT NULL, -- TODO, WIP, DONE
-	title VARCHAR(30) NOT NULL,
+	title VARCHAR(20) NOT NULL,
 	description VARCHAR(500) NOT NULL,
 	created_date TIMESTAMPTZ NOT NULL,
 	last_updated TIMESTAMPTZ NOT NULL

@@ -164,6 +164,7 @@ export interface Task {
   id: number;
   board_id: number;
   author_id: number;
+  assignee_id: number | null;
   state: TaskState;
   title: string;
   description: string;
@@ -182,13 +183,21 @@ interface CreateTaskPayload {
   title: string;
   description: string;
   state: TaskState;
+  user: number;
+  assignee: number | null;
 }
 export function useCreateTask() {
   const queryClient = useQueryClient();
 
   return useMutation(
-    ({ board, title, description, state }: CreateTaskPayload) =>
-      post<Task>(`/api/boards/${board}/tasks`, { title, description, state }),
+    ({ board, title, description, state, user, assignee }: CreateTaskPayload) =>
+      post<Task>(`/api/boards/${board}/tasks`, {
+        title,
+        description,
+        state,
+        user,
+        assignee,
+      }),
     {
       onSuccess: (newTask, { board }) => {
         queryClient.setQueriesData<Task[]>(['tasks', board], (tasks) => {
@@ -231,16 +240,18 @@ interface UpdateTaskPayload {
   title: string;
   description: string;
   state: TaskState;
+  assignee: number | null;
 }
 export function useUpdateTask() {
   const queryClient = useQueryClient();
 
   return useMutation(
-    ({ board, task, title, description, state }: UpdateTaskPayload) =>
+    ({ board, task, title, description, state, assignee }: UpdateTaskPayload) =>
       put<Task>(`/api/boards/${board}/tasks/${task}`, {
         title,
         description,
         state,
+        assignee,
       }),
     {
       onSuccess: (updatedTask, { board, task }) => {
@@ -268,23 +279,14 @@ export interface User {
   username: string;
 }
 
-export function useBoardUsers(board: MaybeRef<number>) {
-  return useQuery(['users', board], () =>
-    get<User[]>(`/api/boards/${unref(board)}/users`)
-  );
-}
-
-export function useUser(board: MaybeRef<number>, user: MaybeRef<number>) {
-  const queryClient = useQueryClient();
+export function useBoardUsers<T = User[]>(
+  board: MaybeRef<number>,
+  select?: (u: User[]) => T
+) {
   return useQuery(
-    ['users', board, user],
-    () => get<User>(`/api/boards/${unref(board)}/users/${user}`),
-    {
-      initialData: () =>
-        queryClient
-          .getQueryData<User[]>(['users', board])
-          ?.find((u) => u.id === unref(user)),
-    }
+    ['users', board],
+    () => get<User[]>(`/api/boards/${unref(board)}/users`),
+    { select }
   );
 }
 

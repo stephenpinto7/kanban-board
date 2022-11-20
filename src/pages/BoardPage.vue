@@ -27,13 +27,13 @@
         @click="addTaskDialog"
       />
       <div class="row items-stretch q-col-gutter-lg">
-        <div class="col-12 col-sm-4">
-          <task-column :tasks="todoTasks" title="To-Do" />
+        <div class="col-12 col-sm-6 col-md-4">
+          <task-column :tasks="todoTasks" title="To Do" />
         </div>
-        <div class="col-12 col-sm-4">
+        <div class="col-12 col-sm-6 col-md-4">
           <task-column :tasks="wipTasks" title="Work In Progress" />
         </div>
-        <div class="col-12 col-sm-4">
+        <div class="col-12 col-sm-6 col-md-4">
           <task-column :tasks="doneTasks" title="Done" />
         </div>
       </div>
@@ -105,6 +105,8 @@ const addTaskDialog = () => {
       title: '',
       description: '',
       state: 'TODO',
+      asignee: null,
+      board: props.boardId,
     },
   }).onOk((taskEdit) => {
     createTask(
@@ -113,6 +115,8 @@ const addTaskDialog = () => {
         title: taskEdit.title,
         description: taskEdit.description,
         state: taskEdit.state,
+        user: taskEdit.user,
+        assignee: taskEdit.assignee,
       },
       {
         onError: (error) => {
