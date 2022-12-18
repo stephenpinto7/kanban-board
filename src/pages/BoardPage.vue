@@ -105,7 +105,7 @@ const addTaskDialog = () => {
       title: '',
       description: '',
       state: 'TODO',
-      asignee: null,
+      assignee: null,
       board: props.boardId,
     },
   }).onOk((taskEdit) => {

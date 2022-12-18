@@ -23,9 +23,12 @@
       </div>
     </q-card-section>
     <q-card-section>
-      <q-chip icon="person" outline color="accent">
-        {{ user ? user.username : 'unassigned' }}
-      </q-chip>
+      <user-chip
+        :board-id="task.board_id"
+        :user-id="task.assignee_id"
+        blankText="unassigned"
+        tooltip="Assigned To"
+      />
     </q-card-section>
     <q-card-section>
       <q-input
@@ -79,6 +82,7 @@ import { useTimeAgo } from '@vueuse/core';
 import { useQuasar } from 'quasar';
 import EditTaskDialog from 'src/components/EditTaskDialog.vue';
 import { computed, toRef } from 'vue';
+import UserChip from './UserChip.vue';
 
 const props = defineProps<{
   task: Task;
@@ -86,16 +90,11 @@ const props = defineProps<{
 
 const $q = useQuasar();
 
-const created = useTimeAgo(props.task.created_date);
-const lastActivity = useTimeAgo(props.task.last_updated);
+const created = useTimeAgo(computed(() => props.task.created_date));
+const lastActivity = useTimeAgo(computed(() => props.task.last_updated));
 
 const { mutate: deleteTask } = useDeleteTask();
 const { mutate: updateTask } = useUpdateTask();
-
-const { data: users } = useBoardUsers(toRef(props.task, 'board_id'));
-const user = computed(() =>
-  users.value?.find((u) => u.id === props.task.assignee_id)
-);
 
 const performDeleteTask = () => {
   $q.dialog({

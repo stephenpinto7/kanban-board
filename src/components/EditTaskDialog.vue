@@ -26,6 +26,7 @@
               v-model="task.assignee"
               :options="assigneeOptions"
               :loading="usersLoading"
+              clearable
               emit-value
               map-options
               label="Assignee"

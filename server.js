@@ -352,8 +352,11 @@ const validateTask = checkSchema({
     },
   },
   assignee: {
-    exists: {
-      options: { checkNull: false, checkFalsy: false },
+    optional: {
+      options: {
+        nullable: true,
+        checkFalsy: false,
+      },
     },
     isInt: {
       options: true,
@@ -554,23 +557,33 @@ app
           throw new ApiError(404, 'no board exists with the supplied id');
         }
 
-        const user = tx.oneOrNone('SELECT * FROM user where id = $1', [
-          assignee,
-        ]);
-        if (!user) {
-          throw new ApiError(
-            404,
-            'no user exists with the supplied assignee id'
+        if (assignee) {
+          const user = await tx.oneOrNone(
+            'SELECT * FROM account where id = $1',
+            [assignee]
           );
+          if (!user) {
+            throw new ApiError(
+              404,
+              'no user exists with the supplied assignee id'
+            );
+          }
         }
 
-        const task = tx.one(
-          'INSERT INTO task (board_id, author_id, state, title, description, created_date, last_updated) VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) returning *',
-          [boardId, req.session.userId, state, title, description]
+        const task = await tx.one(
+          'INSERT INTO task (board_id, author_id, assignee_id, state, title, description, created_date, last_updated) VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW()) returning *',
+          [
+            boardId,
+            req.session.userId,
+            assignee ?? null,
+            state,
+            title,
+            description,
+          ]
         );
 
         await tx.one(
-          'UPDATE board set last_updated = NOW() where id = $1 returning id',
+          'UPDATE board set last_updated = NOW() where id = $1 returning *',
           [board.id]
         );
 
