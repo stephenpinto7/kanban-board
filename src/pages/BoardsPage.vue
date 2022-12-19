@@ -1,16 +1,13 @@
 <template>
   <q-page padding>
     <h1 class="text-h3 text-center">Available Boards</h1>
-    <q-btn
-      class="q-mb-md"
-      label="New Board"
-      color="primary"
-      @click="addBoard"
-    />
-    <span v-if="loading || error || boards?.length === 0">{{
-      loading || error || 'no boards'
-    }}</span>
-    <div v-else class="row q-gutter-lg">
+    <q-skeleton v-if="loading" type="rect" width="100%" height="25vh" />
+    <div v-else-if="error">
+      <q-banner rounded class="bg-red text-white">
+        An unexpected error occured.
+      </q-banner>
+    </div>
+    <div v-else class="row q-gutter-lg q-px-lg">
       <q-card
         v-for="board in boards"
         :key="board.id"
@@ -26,6 +23,11 @@
           </q-chip>
         </q-card-section>
       </q-card>
+      <div class="self-center">
+        <q-btn icon="add" color="primary" round size="lg" @click="addBoard">
+          <q-tooltip>Create New Board</q-tooltip>
+        </q-btn>
+      </div>
     </div>
   </q-page>
 </template>
