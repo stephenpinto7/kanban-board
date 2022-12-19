@@ -19,7 +19,7 @@ fetch('/api/username', {
 })
   .then((response) => {
     if (response.ok) {
-      router.push('/home');
+      router.push('/boards');
     } else {
       router.push('/');
     }

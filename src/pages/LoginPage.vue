@@ -81,7 +81,7 @@ const login = () => {
     { username: username.value, password: password.value },
     {
       onSuccess: () => {
-        return router.push('/home');
+        return router.push('/boards');
       },
     }
   );

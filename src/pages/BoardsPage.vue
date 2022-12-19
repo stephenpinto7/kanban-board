@@ -1,6 +1,12 @@
 <template>
   <q-page padding>
     <h1 class="text-h3 text-center">Available Boards</h1>
+    <q-btn
+      class="q-mb-md"
+      label="New Board"
+      color="primary"
+      @click="addBoard"
+    />
     <span v-if="loading || error || boards?.length === 0">{{
       loading || error || 'no boards'
     }}</span>
@@ -28,12 +34,37 @@
 import { useBoards } from 'src/queries';
 import { useTimeAgo } from '@vueuse/core';
 import { useRouter } from 'vue-router';
+import { useCreateBoard } from 'src/queries';
+import { useQuasar } from 'quasar';
 
+const $q = useQuasar();
 const router = useRouter();
 
 const { data: boards, isLoading: loading, isError: error } = useBoards();
 
 const formatTimeAgo = (date: string) => {
   return useTimeAgo(Date.parse(date)).value;
+};
+
+const { mutate: createBoard } = useCreateBoard();
+const addBoard = () => {
+  $q.dialog({
+    title: 'New Board Title (max 20 characters):',
+    prompt: {
+      model: '',
+      type: 'text',
+      isValid: (val) => val.length > 0 && val.length <= 20,
+    },
+
+    cancel: true,
+    persistent: false,
+  }).onOk((name: string) => {
+    createBoard(name, {
+      onError: (error) => {
+        console.error('Error creating board: %o', error);
+        $q.notify({ type: 'negative', message: 'An unexpected error occured' });
+      },
+    });
+  });
 };
 </script>

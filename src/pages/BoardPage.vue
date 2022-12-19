@@ -1,5 +1,6 @@
 <template>
   <q-page padding>
+    <q-btn icon="arrow_back" flat label="Back to Boards" to="/boards" />
     <q-skeleton v-if="loading" type="rect" />
     <q-banner v-else-if="error" class="text-white bg-red">
       An unexpected error occured.
