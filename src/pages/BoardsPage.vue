@@ -13,8 +13,25 @@
         :key="board.id"
         @click="router.push(`/board/${board.id}`)"
       >
-        <q-card-section>
+        <q-card-section class="row justify-between">
           <div class="text-h6" style="min-width: 20ch">{{ board.title }}</div>
+          <q-btn
+            icon="close"
+            flat
+            round
+            dense
+            color="negative"
+            :disable="board.owner_id !== user?.userId"
+            @click.stop="deleteBoard(board.id)"
+          >
+            <q-tooltip anchor="top middle" self="bottom middle" :delay="750">
+              {{
+                board.owner_id === user?.userId
+                  ? 'Delete Board'
+                  : 'You are not the owner of this board'
+              }}
+            </q-tooltip>
+          </q-btn>
         </q-card-section>
         <q-card-section>
           <q-chip>
@@ -33,15 +50,16 @@
 </template>
 
 <script setup lang="ts">
-import { useBoards } from 'src/queries';
+import { useBoards, useUser } from 'src/queries';
 import { useTimeAgo } from '@vueuse/core';
 import { useRouter } from 'vue-router';
-import { useCreateBoard } from 'src/queries';
+import { useCreateBoard, useDeleteBoard } from 'src/queries';
 import { useQuasar } from 'quasar';
 
 const $q = useQuasar();
 const router = useRouter();
 
+const { data: user } = useUser();
 const { data: boards, isLoading: loading, isError: error } = useBoards();
 
 const formatTimeAgo = (date: string) => {
@@ -69,4 +87,13 @@ const addBoard = () => {
     });
   });
 };
+
+const { mutate: deleteBoard } = useDeleteBoard();
+const removeBoard = (id: number) =>
+  deleteBoard(id, {
+    onError: (error) => {
+      console.error('Error deleting board: %o', error);
+      $q.notify({ type: 'negative', message: 'An unexpected error occured' });
+    },
+  });
 </script>

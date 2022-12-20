@@ -86,10 +86,10 @@ const db = pgp({
 });
 
 app.get(
-  '/api/username',
+  '/api/user',
   isAuthenticated,
   asyncHandler(async (req, res) => {
-    res.json(req.session.username);
+    res.json({ username: req.session.username, userId: req.session.userId });
   })
 );
 
@@ -163,7 +163,7 @@ app.post(
     req.session.regenerate(() => {
       req.session.username = user.username;
       req.session.userId = user.id;
-      res.status(204).json(null);
+      res.status(201).json({ username: user.username, userId: user.id });
     });
   })
 );
@@ -221,19 +221,21 @@ app
     asyncHandler(async (req, res) => {
       const { title } = req.body;
 
-      await db.tx(async (tx) => {
-        const { id } = await tx.one(
-          'INSERT INTO board (owner_id, title, created_date, last_updated) VALUES ($1, $2, NOW(), NOW()) RETURNING id',
+      const board = await db.tx(async (tx) => {
+        const board = await tx.one(
+          'INSERT INTO board (owner_id, title, created_date, last_updated) VALUES ($1, $2, NOW(), NOW()) RETURNING *',
           [req.session.userId, title]
         );
 
         await tx.one(
           'INSERT INTO board_user (user_id, board_id) VALUES ($1, $2) RETURNING id',
-          [req.session.userId, id]
+          [req.session.userId, board.id]
         );
+
+        return board;
       });
 
-      res.status(201).json(null);
+      res.status(201).json(board);
     })
   );
 
@@ -304,7 +306,7 @@ app
         await tx.any('DELETE FROM task WHERE board_id = $1', [boardId]);
         await tx.any('DELETE FROM board_user WHERE board_id = $1', [boardId]);
 
-        await tx.one('DELETE FROM board WHERE id = $1', [boardId]);
+        await tx.one('DELETE FROM board WHERE id = $1 RETURNING id', [boardId]);
       });
 
       res.status(204).json(null);

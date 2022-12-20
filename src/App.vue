@@ -9,7 +9,7 @@ import { useQuasar } from 'quasar';
 const router = useRouter();
 const $q = useQuasar();
 
-fetch('/api/username', {
+fetch('/api/user', {
   method: 'GET',
   headers: {
     Accept: 'application/json',

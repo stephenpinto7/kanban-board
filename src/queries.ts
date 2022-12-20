@@ -3,9 +3,10 @@ import { unref } from 'vue';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/vue-query';
 import ky from 'ky';
 
-export async function get<T>(target: string): Promise<T> {
+export async function get<T>(target: string, signal: AbortSignal): Promise<T> {
   return await ky
     .get(target, {
+      signal,
       retry: 0,
       hooks: {
         afterResponse: [
@@ -71,51 +72,55 @@ export async function put<T>(target: string, data?: unknown): Promise<T> {
     .json();
 }
 
-export function useUsername() {
+export interface User {
+  username: string;
+  userId: number;
+}
+export function useUser<T = User>(select?: (u: User) => T) {
   return useQuery(
-    ['username'],
-    async () => await get<string>('/api/username'),
+    ['user'],
+    async ({ signal }) => await get<User>('/api/user', signal!),
     {
       staleTime: Number.POSITIVE_INFINITY,
       cacheTime: Number.POSITIVE_INFINITY,
+      select,
     }
   );
 }
+
 interface LoginCredentials {
   username: string;
   password: string;
 }
+
 export function useLogin() {
   const queryClient = useQueryClient();
 
-  return useMutation<void, Error, LoginCredentials>(
-    (credentials: LoginCredentials) => post<void>('/api/login', credentials),
+  return useMutation(
+    (credentials: LoginCredentials) => post<User>('/api/login', credentials),
     {
-      onSuccess: (_serverResponse, credentials) => {
-        queryClient.setQueryData(['username'], credentials.username);
+      onSuccess: (user, _credentials) => {
+        queryClient.setQueryData<User>(['user'], user);
       },
     }
   );
 }
+
 export function useLogout() {
   const queryClient = useQueryClient();
 
-  return useMutation<void, Error, void>(() => post<void>('/api/logout'), {
-    onSuccess: () => {
-      return queryClient.invalidateQueries(['username']);
+  return useMutation(() => post<void>('/api/logout'), {
+    onSuccess: async () => {
+      // Purge entire cache to avoid conflict between different users
+      await queryClient.cancelQueries();
+      queryClient.removeQueries();
     },
   });
 }
-export function useRegister() {
-  const queryClient = useQueryClient();
 
-  return useMutation<void, Error, LoginCredentials>(
-    (credentials: LoginCredentials) => post<void>('/api/register', credentials),
-    {
-      onSuccess: (_serverResponse, credentials) => {
-        queryClient.setQueryData(['username'], credentials.username);
-      },
-    }
+export function useRegister() {
+  return useMutation((credentials: LoginCredentials) =>
+    post<void>('/api/register', credentials)
   );
 }
 
@@ -130,7 +135,9 @@ export interface Board {
 type MaybeRef<T> = T | Ref<T>;
 
 export function useBoards() {
-  return useQuery(['boards'], () => get<Board[]>('/api/boards'));
+  return useQuery(['boards'], ({ signal }) =>
+    get<Board[]>('/api/boards', signal!)
+  );
 }
 
 export function useBoard(boardId: MaybeRef<number>) {
@@ -138,7 +145,7 @@ export function useBoard(boardId: MaybeRef<number>) {
 
   return useQuery(
     ['boards', boardId],
-    () => get<Board>(`/api/boards/${unref(boardId)}`),
+    ({ signal }) => get<Board>(`/api/boards/${unref(boardId)}`, signal!),
     {
       initialData: () =>
         queryClient
@@ -151,9 +158,23 @@ export function useBoard(boardId: MaybeRef<number>) {
 export function useCreateBoard() {
   const queryClient = useQueryClient();
 
-  return useMutation((title: string) => post('/api/boards', { title }), {
-    onSuccess: () => {
-      return queryClient.invalidateQueries(['boards']);
+  return useMutation((title: string) => post<Board>('/api/boards', { title }), {
+    onSuccess: (newBoard) => {
+      queryClient.setQueryData<Board[]>(['boards'], (boards) =>
+        boards ? [...boards, newBoard] : [newBoard]
+      );
+    },
+  });
+}
+
+export function useDeleteBoard() {
+  const queryClient = useQueryClient();
+
+  return useMutation((id: number) => del(`/api/boards/${id}`), {
+    onSuccess: (_data, id, _context) => {
+      queryClient.setQueryData<Board[]>(['boards'], (boards) =>
+        boards?.filter((board) => board.id !== id)
+      );
     },
   });
 }
@@ -173,8 +194,8 @@ export interface Task {
 }
 
 export function useTasks(board: MaybeRef<number>) {
-  return useQuery(['tasks', board], () =>
-    get<Task[]>(`/api/boards/${unref(board)}/tasks`)
+  return useQuery(['tasks', board], ({ signal }) =>
+    get<Task[]>(`/api/boards/${unref(board)}/tasks`, signal!)
   );
 }
 
@@ -274,18 +295,19 @@ export function useUpdateTask() {
   );
 }
 
-export interface User {
+export interface BoardUser {
   id: number;
   username: string;
 }
 
-export function useBoardUsers<T = User[]>(
+export function useBoardUsers<T = BoardUser[]>(
   board: MaybeRef<number>,
-  select?: (u: User[]) => T
+  select?: (u: BoardUser[]) => T
 ) {
   return useQuery(
     ['users', board],
-    () => get<User[]>(`/api/boards/${unref(board)}/users`),
+    ({ signal }) =>
+      get<BoardUser[]>(`/api/boards/${unref(board)}/users`, signal!),
     { select }
   );
 }
