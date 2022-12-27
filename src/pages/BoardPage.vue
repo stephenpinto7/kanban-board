@@ -8,9 +8,39 @@
     <div v-else>
       <h1 class="text-h3 text-center">{{ board?.title }}</h1>
       <div class="row items-center q-gutter-sm q-mb-md">
-        <div v-for="user in users" :key="user.id" class="row">
-          <q-chip icon="person">{{ user.username }}</q-chip>
-        </div>
+        <template v-for="user in users" :key="user.id">
+          <q-chip
+            v-if="user.id === board?.owner_id"
+            class="glossy"
+            icon="person"
+            color="yellow"
+            :class="
+              user.id === currentUser?.userId ? 'current-user-border' : ''
+            "
+          >
+            {{ user.username }}
+            <template v-if="user.id === currentUser?.userId">
+              <q-tooltip>You are the owner of this board</q-tooltip>
+              <q-badge floating color="green" rounded />
+            </template>
+            <template v-else>
+              <q-tooltip>Board Owner</q-tooltip>
+            </template>
+          </q-chip>
+          <q-chip
+            v-else
+            icon="person"
+            :class="
+              user.id === currentUser?.userId ? 'current-user-border' : ''
+            "
+          >
+            {{ user.username }}
+            <template v-if="user.id === currentUser?.userId">
+              <q-tooltip> This is you </q-tooltip>
+              <q-badge floating color="green" rounded />
+            </template>
+          </q-chip>
+        </template>
         <div>
           <q-btn
             round
@@ -49,8 +79,7 @@ import {
   useAddBoardUser,
   useBoardUsers,
   useCreateTask,
-  Task,
-  useUpdateTask,
+  useUser,
 } from 'src/queries';
 import { computed } from 'vue';
 import { useQuasar } from 'quasar';
@@ -62,11 +91,13 @@ const boardId = computed(() => Number.parseInt(props.boardId, 10));
 const $q = useQuasar();
 
 const { data: board, isLoading: loading, isError: error } = useBoard(boardId);
-const { data: tasks } = useTasks(boardId);
-const { data: users } = useBoardUsers(boardId);
 const { mutate: addUser } = useAddBoardUser();
+
+const { data: tasks } = useTasks(boardId);
 const { mutate: createTask } = useCreateTask();
-const { mutate: updateTask } = useUpdateTask();
+
+const { data: users } = useBoardUsers(boardId);
+const { data: currentUser } = useUser();
 
 const addUserDialog = () => {
   $q.dialog({

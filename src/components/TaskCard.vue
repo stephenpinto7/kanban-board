@@ -28,6 +28,7 @@
         :user-id="task.assignee_id"
         blankText="unassigned"
         tooltip="Assigned To"
+        indicator
       />
     </q-card-section>
     <q-card-section>
