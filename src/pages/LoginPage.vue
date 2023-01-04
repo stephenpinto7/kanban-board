@@ -9,7 +9,7 @@
             </q-card-section>
             <q-card-section v-if="error">
               <q-banner class="bg-red text-white">
-                {{ error.message }}
+                {{ error }}
               </q-banner>
             </q-card-section>
             <q-card-section class="q-gutter-md" style="width: 25em">
@@ -37,14 +37,15 @@
                 class="full-width"
                 label="Login"
                 type="submit"
+                :loading="isLoading"
               />
               <q-btn
-                unelevated
+                flat
                 to="/register"
-                color="secondary"
-                size="lg"
+                color="primary"
+                size="md"
                 class="full-width"
-                label="Register"
+                label="Not a user? Register here."
               />
             </q-card-actions>
           </q-form>
@@ -59,6 +60,7 @@ import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useLogin } from 'src/queries';
 import { type ValidationRule } from 'quasar';
+import { HTTPError } from 'ky';
 
 const router = useRouter();
 
@@ -74,14 +76,33 @@ const passwordRules: ValidationRule<string>[] = [
   (val) => val.length <= 120 || 'password must be 120 characters or less',
 ];
 
-const { mutate: postLogin, error } = useLogin();
+const { mutate: postLogin, isLoading } = useLogin();
+const error = ref('');
 
 const login = () => {
+  error.value = '';
   postLogin(
     { username: username.value, password: password.value },
     {
       onSuccess: () => {
         return router.push('/boards');
+      },
+      onError(loginError, variables, context) {
+        if (loginError instanceof HTTPError) {
+          loginError.response.json().then((response) => {
+            if (
+              response?.error === 'no account exists with the supplied username'
+            ) {
+              error.value = 'No account found with that username';
+            } else if (response?.error === 'password was incorrect') {
+              error.value = 'Password was incorrect.';
+            } else {
+              error.value = 'An unexpected error occured.';
+            }
+          });
+        } else {
+          error.value = 'An unexpected error occured.';
+        }
       },
     }
   );

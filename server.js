@@ -117,7 +117,7 @@ app.post(
   asyncHandler(async (req, res) => {
     const { username, password } = req.body;
 
-    await db.tx(async (tx) => {
+    const user = await db.tx(async (tx) => {
       const user = await tx.oneOrNone(
         'SELECT * FROM account WHERE username = $1;',
         [username]
@@ -130,13 +130,17 @@ app.post(
       const salt = bcrypt.genSaltSync(12);
       const passwordHash = bcrypt.hashSync(password, salt);
 
-      await tx.one(
-        'INSERT INTO account (username, password, salt, created_date) VALUES ($1, $2, $3, NOW()) RETURNING id',
+      return await tx.one(
+        'INSERT INTO account (username, password, salt, created_date) VALUES ($1, $2, $3, NOW()) RETURNING id, username',
         [username, passwordHash, salt]
       );
     });
 
-    res.status(204).json(null);
+    req.session.regenerate(() => {
+      req.session.username = user.username;
+      req.session.userId = user.id;
+      res.status(201).json({ username: user.username, userId: user.id });
+    });
   })
 );
 
@@ -163,7 +167,7 @@ app.post(
     req.session.regenerate(() => {
       req.session.username = user.username;
       req.session.userId = user.id;
-      res.status(201).json({ username: user.username, userId: user.id });
+      res.status(200).json({ username: user.username, userId: user.id });
     });
   })
 );

@@ -3,13 +3,13 @@
     <div class="column">
       <div class="row">
         <q-card square bordered class="q-pa-lg shadow-1">
-          <q-form @submit="login">
+          <q-form @submit="registerUser">
             <q-card-section>
               <div class="text-h4">Register</div>
             </q-card-section>
             <q-card-section v-if="error">
               <q-banner class="bg-red text-white">
-                {{ error.message }}
+                {{ error }}
               </q-banner>
             </q-card-section>
             <q-card-section class="q-gutter-md" style="width: 25em">
@@ -40,19 +40,12 @@
             <q-card-actions class="q-px-md q-gutter-sm">
               <q-btn
                 unelevated
-                color="primary"
-                size="lg"
-                class="full-width"
-                label="Login"
-                type="submit"
-              />
-              <q-btn
-                unelevated
-                to="/register"
                 color="secondary"
                 size="lg"
                 class="full-width"
                 label="Register"
+                :loading="isLoading"
+                type="submit"
               />
             </q-card-actions>
           </q-form>
@@ -68,6 +61,7 @@ import { useQuasar } from 'quasar';
 import { useRouter } from 'vue-router';
 import { useRegister } from 'src/queries';
 import { type ValidationRule } from 'quasar';
+import { HTTPError } from 'ky';
 
 const $q = useQuasar();
 const router = useRouter();
@@ -91,12 +85,27 @@ const passwordConfirmRules: ValidationRule<string>[] = [
   (val) => val === password.value || 'passwords do not match',
 ];
 
-const { mutate: register, error } = useRegister();
+const { mutate: register, isLoading } = useRegister();
+const error = ref('');
 
-const login = () => {
+const registerUser = () => {
+  error.value = '';
   register(
     { username: username.value, password: password.value },
     {
+      onError(registerError, variables, context) {
+        if (registerError instanceof HTTPError) {
+          registerError.response.json().then((response) => {
+            if (response?.error === 'Username already exists') {
+              error.value = 'Username already taken, please try another.';
+            } else {
+              error.value = 'An unexpected error occured.';
+            }
+          });
+        } else {
+          error.value = 'An unexpected error occured.';
+        }
+      },
       onSuccess: () => {
         return router.push('/boards');
       },

@@ -27,6 +27,11 @@ export async function post<T>(target: string, data?: unknown): Promise<T> {
       json: data,
       retry: 0,
       hooks: {
+        // beforeError: [
+        //   (error) => {
+        //     error.
+        //   }
+        // ],
         afterResponse: [
           (_request, _options, response) => {
             if (response.status === 401) {
@@ -119,8 +124,15 @@ export function useLogout() {
 }
 
 export function useRegister() {
-  return useMutation((credentials: LoginCredentials) =>
-    post<void>('/api/register', credentials)
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    (credentials: LoginCredentials) => post<User>('/api/register', credentials),
+    {
+      onSuccess(user, _credentials) {
+        queryClient.setQueryData<User>(['user'], user);
+      },
+    }
   );
 }
 
