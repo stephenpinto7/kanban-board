@@ -43,6 +43,7 @@
         </template>
         <div>
           <q-btn
+            v-if="currentUser && board && currentUser.userId === board.owner_id"
             round
             color="primary"
             icon="add"
