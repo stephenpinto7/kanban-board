@@ -1,6 +1,7 @@
 require('dotenv').config({ path: './server.env' });
 
 const express = require('express');
+const path = require('path');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const { createClient } = require('redis');
@@ -84,6 +85,8 @@ const db = pgp({
   user: process.env.POSTGRESQL_USER,
   password: process.env.POSTGRESQL_PASSWORD,
 });
+
+app.use('/', express.static(path.resolve(__dirname, 'dist', 'spa')));
 
 app.get(
   '/api/user',
