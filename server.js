@@ -24,7 +24,7 @@ class ApiError extends Error {
 }
 
 const app = express();
-const port = 3000;
+const port = process.env.port || 3000;
 
 app.use(helmet());
 app.use(express.json());
@@ -34,7 +34,13 @@ const redisClient = createClient({
   legacyMode: true,
 });
 redisClient.on('error', console.error);
-redisClient.connect().catch(console.error);
+redisClient.connect().catch((error) => {
+  console.error(
+    'Unable to connect to Redis.\nURL was: %s\nError was: %o',
+    process.env.REDIS_URL,
+    error
+  );
+});
 const sessionOptions = {
   store: new RedisStore({ client: redisClient }),
   cookie: {
