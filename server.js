@@ -1,5 +1,7 @@
 require('dotenv').config({ path: './server.env' });
 
+console.log('NODE_ENV is %s', process.env.NODE_ENV);
+
 const express = require('express');
 const path = require('path');
 const bcrypt = require('bcryptjs');
@@ -54,6 +56,7 @@ const sessionOptions = {
   rolling: true,
 };
 if (process.env.NODE_ENV === 'production') {
+  console.log('Setting secure cookie');
   sessionOptions.cookie.secure = true;
 }
 app.use(session(sessionOptions));
