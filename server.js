@@ -29,6 +29,7 @@ const port = process.env.port || 3000;
 app.use(helmet());
 app.use(express.json());
 
+console.log('Connecting to redis at %s', process.env.REDIS_URL);
 const redis = new Redis(process.env.REDIS_URL);
 const sessionOptions = {
   store: new RedisStore({ client: redis }),
