@@ -4,7 +4,7 @@ const express = require('express');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
-const { createClient } = require('redis');
+const Redis = require('ioredis');
 const pgp = require('pg-promise')();
 const RedisStore = require('connect-redis')(session);
 const helmet = require('helmet');
@@ -29,20 +29,9 @@ const port = process.env.port || 3000;
 app.use(helmet());
 app.use(express.json());
 
-const redisClient = createClient({
-  url: process.env.REDIS_URL,
-  legacyMode: true,
-});
-redisClient.on('error', console.error);
-redisClient.connect().catch((error) => {
-  console.error(
-    'Unable to connect to Redis.\nURL was: %s\nError was: %o',
-    process.env.REDIS_URL,
-    error
-  );
-});
+const redis = new Redis(process.env.REDIS_URL);
 const sessionOptions = {
-  store: new RedisStore({ client: redisClient }),
+  store: new RedisStore({ client: redis }),
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 7,
   },
