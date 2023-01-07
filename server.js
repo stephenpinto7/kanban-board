@@ -29,8 +29,20 @@ const port = process.env.port || 3000;
 app.use(helmet());
 app.use(express.json());
 
-console.log('Connecting to redis at %s', process.env.REDIS_URL);
-const redis = new Redis(process.env.REDIS_URL);
+const redis = new Redis({
+  host: process.env.REDIS_HOST,
+  port: process.env.REDIS_PORT,
+});
+
+redis.addListener('error', (error) => {
+  console.error(
+    'Redis Error: %o\nHost was: %s\nPort was: %s',
+    error,
+    process.env.REDIS_HOST,
+    process.env.REDIS_PORT
+  );
+});
+
 const sessionOptions = {
   store: new RedisStore({ client: redis }),
   cookie: {
