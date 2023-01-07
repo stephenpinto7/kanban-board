@@ -1,7 +1,5 @@
 require('dotenv').config({ path: './server.env' });
 
-console.log('NODE_ENV is %s', process.env.NODE_ENV);
-
 const express = require('express');
 const path = require('path');
 const bcrypt = require('bcryptjs');
@@ -49,6 +47,7 @@ const sessionOptions = {
   store: new RedisStore({ client: redis }),
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 7,
+    sameSite: 'lax',
   },
   secret: process.env.SESSION_SECRET,
   saveUninitialized: false,
