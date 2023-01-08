@@ -47,7 +47,6 @@ const sessionOptions = {
   store: new RedisStore({ client: redis }),
   cookie: {
     maxAge: 1000 * 60 * 60 * 24 * 7,
-    sameSite: 'lax',
   },
   secret: process.env.SESSION_SECRET,
   saveUninitialized: false,
@@ -55,8 +54,10 @@ const sessionOptions = {
   rolling: true,
 };
 if (process.env.NODE_ENV === 'production') {
-  console.log('Setting secure cookie');
   sessionOptions.cookie.secure = true;
+  sessionOptions.cookie.httpOnly = true;
+
+  app.enable('trust proxy');
 }
 app.use(session(sessionOptions));
 app.use((req, res, next) => {
