@@ -191,8 +191,7 @@ app.post('/api/logout', (req, res) => {
 });
 
 app.get(
-  '/api/user/:username',
-  isAuthenticated,
+  '/api/users/:username',
   param('username')
     .exists({ checkNull: true, checkFalsy: true })
     .withMessage('no username supplied')

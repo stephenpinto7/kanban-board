@@ -49,7 +49,11 @@
             icon="add"
             size="sm"
             @click="addUserDialog"
-          />
+          >
+            <q-tooltip anchor="center right" self="center left">
+              Add user to board
+            </q-tooltip>
+          </q-btn>
         </div>
       </div>
       <q-btn
@@ -86,6 +90,7 @@ import { computed } from 'vue';
 import { useQuasar } from 'quasar';
 import TaskColumn from 'src/components/TaskColumn.vue';
 import EditTaskDialog from 'src/components/EditTaskDialog.vue';
+import AddUserDialog from 'src/components/AddUserDialog.vue';
 
 const props = defineProps<{ boardId: string }>();
 const boardId = computed(() => Number.parseInt(props.boardId, 10));
@@ -102,12 +107,7 @@ const { data: currentUser } = useUser();
 
 const addUserDialog = () => {
   $q.dialog({
-    title: 'Add User to Board',
-    prompt: {
-      model: '',
-      type: 'number',
-    },
-    cancel: true,
+    component: AddUserDialog,
   }).onOk((userId: string) => {
     const userIdNumber = parseInt(userId, 10);
     if (users.value?.some((u) => u.id === userIdNumber)) {
