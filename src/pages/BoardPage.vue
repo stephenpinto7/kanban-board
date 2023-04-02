@@ -33,6 +33,17 @@
             :class="
               user.id === currentUser?.userId ? 'current-user-border' : ''
             "
+            v-bind="
+              user.id === currentUser?.userId
+                ? { class: 'current-user-border' }
+                : currentUser?.userId === board?.owner_id
+                ? {
+                    removable: true,
+                    iconRemove: 'close',
+                    onRemove: () => removeUser(user),
+                  }
+                : {}
+            "
           >
             {{ user.username }}
             <template v-if="user.id === currentUser?.userId">
@@ -79,12 +90,14 @@
 
 <script setup lang="ts">
 import {
+  BoardUser,
   useBoard,
   useTasks,
   useAddBoardUser,
   useBoardUsers,
   useCreateTask,
   useUser,
+  useDeleteBoardUser,
 } from 'src/queries';
 import { computed } from 'vue';
 import { useQuasar } from 'quasar';
@@ -98,6 +111,7 @@ const $q = useQuasar();
 
 const { data: board, isLoading: loading, isError: error } = useBoard(boardId);
 const { mutate: addUser } = useAddBoardUser();
+const { mutate: deleteUser } = useDeleteBoardUser();
 
 const { data: tasks } = useTasks(boardId);
 const { mutate: createTask } = useCreateTask();
@@ -158,6 +172,28 @@ const addTaskDialog = () => {
             type: 'negative',
             message: 'Unable to create task',
           });
+        },
+      }
+    );
+  });
+};
+
+const removeUser = (user: BoardUser) => {
+  $q.dialog({
+    title: 'Remove User',
+    message: `Are you sure you want to remove ${user.username} from the board? This action is permanent.`,
+    persistent: true,
+    cancel: true,
+  }).onOk(() => {
+    deleteUser(
+      { boardId: parseInt(props.boardId, 10), userId: user.id },
+      {
+        onSuccess: () => {
+          $q.notify({ type: 'success', message: 'User removed' });
+        },
+        onError: (error) => {
+          $q.notify({ type: 'negative', message: 'Unable to remove user' });
+          console.error('Error while removing user: %o', error);
         },
       }
     );

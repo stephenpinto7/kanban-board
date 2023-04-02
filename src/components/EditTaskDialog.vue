@@ -65,7 +65,7 @@ import {
   ValidationRule,
 } from 'quasar';
 import { TaskState } from 'src/queries';
-import { reactive, ref, toRef } from 'vue';
+import { reactive, toRef } from 'vue';
 import { useBoardUsers } from 'src/queries';
 
 interface TaskEdit {

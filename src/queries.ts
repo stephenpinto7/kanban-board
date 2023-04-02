@@ -339,7 +339,6 @@ export function useAddBoardUser() {
         queryClient.setQueryData<User[]>(
           ['users', parseInt(boardId, 10)],
           (users) => {
-            console.log('Adding user!');
             if (!users) {
               return [newUser];
             } else {
@@ -348,6 +347,43 @@ export function useAddBoardUser() {
               );
             }
           }
+        );
+      },
+    }
+  );
+}
+
+interface DeleteBoardUserParams {
+  boardId: number;
+  userId: number;
+}
+export function useDeleteBoardUser() {
+  const queryClient = useQueryClient();
+
+  return useMutation(
+    ({ boardId, userId }: DeleteBoardUserParams) =>
+      del(`/api/boards/${boardId}/users/${userId}`),
+    {
+      onSuccess: (_, { boardId, userId }, _context) => {
+        console.log('Removing user.');
+        // Unassign the removed user's tasks
+        queryClient.setQueryData<Task[]>(['tasks', boardId], (tasks) => {
+          if (!tasks) {
+            return [];
+          }
+          const newTasks = structuredClone(tasks) as Task[];
+          newTasks.forEach((task) => {
+            if (task.assignee_id === userId) {
+              task.assignee_id = null;
+            }
+          });
+
+          return newTasks;
+        });
+
+        queryClient.setQueryData<BoardUser[]>(
+          ['users', boardId],
+          (users) => users?.filter((u) => u.id !== userId) ?? []
         );
       },
     }

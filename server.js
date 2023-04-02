@@ -476,10 +476,9 @@ app
           throw new ApiError(404, 'no board exists with the supplied id');
         }
 
-        const user = await tx.oneOrNone(
-          'SELECT * FROM accounts WHERE id = $1',
-          [userId]
-        );
+        const user = await tx.oneOrNone('SELECT * FROM account WHERE id = $1', [
+          userId,
+        ]);
         if (!user) {
           throw new ApiError(404, 'no user exists with the supplied id');
         }
@@ -514,13 +513,18 @@ app
           throw new ApiError(404);
         }
 
-        const user = await tx.oneOrNone(
-          'SELECT * FROM accounts WHERE id = $1',
-          [userId]
-        );
+        const user = await tx.oneOrNone('SELECT * FROM account WHERE id = $1', [
+          userId,
+        ]);
         if (!user) {
           throw new ApiError(404, 'no user exists with the supplied id');
         }
+
+        // Unassign the removed user's tasks
+        await tx.any(
+          'UPDATE task SET assignee_id = NULL WHERE assignee_id = $1',
+          [userId]
+        );
 
         await tx.oneOrNone(
           'DELETE FROM board_user WHERE board_id = $1 AND user_id = $2',
@@ -528,7 +532,7 @@ app
         );
 
         await tx.one(
-          'UPDATE board set last_updated = NOW() where id = $1 returning id',
+          'UPDATE board SET last_updated = NOW() WHERE id = $1 RETURNING id',
           [board.id]
         );
       });
