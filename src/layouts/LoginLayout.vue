@@ -19,7 +19,14 @@
     </q-page-container>
 
     <q-footer class="bg-white text-black">
-      <div class="text-caption">Created by Stephen Pinto</div>
+      <span class="text-caption"
+        >Created by Stephen Pinto (
+        <a href="mailto:spinto7@hotmail.com">spinto7@hotmail.com</a>). Source
+        code available at
+        <a target="blank" href="https://github.com/stephenpinto7/kanban-board">
+          https://github.com/stephenpinto7/kanban-board
+        </a></span
+      >
     </q-footer>
   </q-layout>
 </template>

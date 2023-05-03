@@ -1,6 +1,6 @@
 <template>
   <q-page padding>
-    <q-btn icon="arrow_back" flat label="Back to Home" to="/" />
+    <q-btn icon="arrow_back" flat label="Back to Home" to="/boards" />
     <h2 class="text-center">What is Kanban?</h2>
     <p>
       <a href="https://www.atlassian.com/agile/kanban" target="_blank">
