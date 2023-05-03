@@ -28,6 +28,11 @@ const routes: RouteRecordRaw[] = [
     children: [{ path: '', component: () => import('pages/BoardsPage.vue') }],
   },
   {
+    path: '/about',
+    component: () => import('layouts/LoginLayout.vue'),
+    children: [{ path: '', component: () => import('pages/AboutPage.vue') }],
+  },
+  {
     path: '/:catchAll(.*)*',
     component: () => import('pages/ErrorNotFound.vue'),
   },

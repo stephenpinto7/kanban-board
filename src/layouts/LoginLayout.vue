@@ -6,6 +6,11 @@
           <q-icon name="view_kanban" size="2em" />
           Kanban Board
         </q-toolbar-title>
+        <q-btn icon="question_mark" round flat dense to="/about">
+          <q-tooltip anchor="bottom middle" self="top middle">
+            Learn More
+          </q-tooltip>
+        </q-btn>
       </q-toolbar>
     </q-header>
 
