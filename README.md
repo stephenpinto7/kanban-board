@@ -1,41 +1,73 @@
-# Kanban Board (kanban-board)
+# Kanban Board by Stephen Pinto
 
-A simple kanban board app.
+Live verison available at: [https://kanban-board-jspb.onrender.com](https://kanban-board-jspb.onrender.com)
 
-## Install the dependencies
+## About
+
+A web application implementing a simple Kanban Board. A non-trival application showcasing both front end and back end development.
+
+## Features
+
+- Create/Delete boards
+- Add/remove users to/from boards
+- Create/Delete tasks
+- Assign users to tasks
+- Move tasks between the TODO, WIP, and Done states
+
+## Technology
+
+- Front end: [Quasar Framework](https://quasar.dev/) (based on [Vue.js v3](https://vuejs.org/))
+- Back end: custom built with [Express JS](https://expressjs.com/)
+- Database: [PostgreSQL](https://www.postgresql.org/)
+- Session Management: [Redis](https://redis.io/)
+
+## Inital Setup
+
+### Clone Repo and Install Dependencies
+
 ```bash
-yarn
-# or
+git clone https://github.com/stephenpinto7/kanban-board.git
 npm install
 ```
 
-### Start the app in development mode (hot-code reloading, error reporting, etc.)
+### Run Databases
+
+The databases can be run with [Docker Compose](https://docs.docker.com/compose/compose-file/). For the first run you can create the containers like so:
+
 ```bash
-quasar dev
+docker compose up
 ```
 
+Afterwards you can stop the containers with:
 
-### Lint the files
 ```bash
-yarn lint
-# or
-npm run lint
+docker compose stop
 ```
 
+And you can restart them with:
 
-### Format the files
 ```bash
-yarn format
-# or
-npm run format
+docker compose start
 ```
 
+### Back End
 
+The webserver can be started with:
 
-### Build the app for production
+```bash
+node server.js
+```
+
+### Front End
+
+The front end dev sever can be started with:
+
+```bash
+npx quasar dev
+```
+
+## Build the app for production
+
 ```bash
 quasar build
 ```
-
-### Customize the configuration
-See [Configuring quasar.config.js](https://v2.quasar.dev/quasar-cli-vite/quasar-config-js).
